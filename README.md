@@ -133,12 +133,16 @@ As etapas de coleta, estruturação, processamento e visualização dos dados se
 
 Acesse a página de apresentação da iniciativa:
 
-[Recicla Londrina](xxx)
+[Recicla Londrina](https://dashboard-python-recicla-londrina-pr.streamlit.app/)
 
 ## 👩‍💻 Contributors
 
 Projeto acadêmico desenvolvido colaborativamente por estudantes de Ciência de Dados.
-
+- Júlia Ribeiro Montá
+- Irys de Carvalho Rodrigues
+- Denise Teodoro Ferreira
+- Ana Carolina dos Santos Riodades
+- Rebecca Brandão Fraiha
 ---
 
 <p align="center">
