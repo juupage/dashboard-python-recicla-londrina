@@ -1,159 +1,450 @@
-'''Aqui começaremos a importar as bibliotecas'''
+
+# --------------------------------------------------
+# IMPORTAÇÃO DAS BIBLIOTECAS
+# --------------------------------------------------
+
 import streamlit as st
 import pandas as pd
 import plotly.express as px
 
-# --- Configuração da Página ---
-# Define o título da página, o ícone e o layout para ocupar a largura inteira.
+# --------------------------------------------------
+# CONFIGURAÇÃO DA PÁGINA
+# --------------------------------------------------
+
 st.set_page_config(
     page_title="Recicla Londrina | Data Analytics & Dashboard",
-    page_icon="📊",
-    # Wide = Página larga
-    layout="wide",
+    page_icon="♻️",
+    layout="wide"
 )
 
-# --- Carregamento dos dados ---
-df = pd.read_csv("https://raw.githubusercontent.com/vqrca/dashboard_salarios_dados/refs/heads/main/dados-imersao-final.csv")
+# --------------------------------------------------
+# CARREGAMENTO DOS DADOS
+# --------------------------------------------------
 
-# --- Barra Lateral (Filtros) ---
-st.sidebar.header("🔍 Filtros")
+@st.cache_data
+def carregar_dados():
+    df = pd.read_csv("indicadores_londrina_pr.csv")
 
-# Filtro de Ano
-anos_disponiveis = sorted(df['ano'].unique())
-anos_selecionados = st.sidebar.multiselect("Ano", anos_disponiveis, default=anos_disponiveis)
+    # Padronização dos nomes das colunas
+    df.columns = df.columns.str.strip()
 
-# Filtro de Senioridade
-senioridades_disponiveis = sorted(df['senioridade'].unique())
-senioridades_selecionadas = st.sidebar.multiselect("Senioridade", senioridades_disponiveis, default=senioridades_disponiveis)
+    # Conversão do mês para data
+    df["Data"] = pd.to_datetime(
+        df["Mes"].astype(str) + "-01",
+        errors="coerce"
+    )
 
-# Filtro por Tipo de Contrato
-contratos_disponiveis = sorted(df['contrato'].unique())
-contratos_selecionados = st.sidebar.multiselect("Tipo de Contrato", contratos_disponiveis, default=contratos_disponiveis)
+    return df
 
-# Filtro por Tamanho da Empresa
-tamanhos_disponiveis = sorted(df['tamanho_empresa'].unique())
-tamanhos_selecionados = st.sidebar.multiselect("Tamanho da Empresa", tamanhos_disponiveis, default=tamanhos_disponiveis)
 
-# --- Filtragem do DataFrame ---
-# O dataframe principal é filtrado com base nas seleções feitas na barra lateral.
-# Após criar os componentes visuais dos filtros, agora começa a parte da aplicação.
-df_filtrado = df[
-    #Aqui diz que esse DataFrame será filtrado a partir das alterações que o usúario fez na barra lateral.
-    (df['ano'].isin(anos_selecionados)) &
-    (df['senioridade'].isin(senioridades_selecionadas)) &
-    (df['contrato'].isin(contratos_selecionados)) &
-    (df['tamanho_empresa'].isin(tamanhos_selecionados))
+df = carregar_dados()
+
+# --------------------------------------------------
+# VALIDAÇÃO DAS COLUNAS
+# --------------------------------------------------
+
+colunas_necessarias = [
+    "Municipio",
+    "Mes",
+    "Regiao_Setor",
+    "Residuos_Urbanos_Coletados_ton",
+    "Cobertura_Coleta_Urbana_pct",
+    "Custo_Unitario_Urbana_R$_ton",
+    "Residuos_Seletivos_Coletados_ton",
+    "Taxa_Recuperacao_Seletiva_pct",
+    "Rejeito_Coleta_Seletiva_pct",
+    "Custo_Unitario_Seletiva_R$_ton",
+    "Emissoes_CO2_Evitadas_t"
 ]
 
-# Agora vamos criar a página em si:
-# --- Conteúdo Principal ---
-# Aqui estamos dando um título para o nosso Dashboard.
-# E inserimos logo em baixo um texto explicativo.
-st.title("🎲 Dashboard de Análise de Salários na Área de Dados")
-st.markdown("Explore os dados salariais na área de dados nos últimos anos. Utilize os filtros à esquerda para refinar sua análise.")
+colunas_faltantes = [
+    coluna for coluna in colunas_necessarias
+    if coluna not in df.columns
+]
 
-# --- Métricas Principais (KPIs) ---
-st.subheader("Métricas gerais (Salário anual em USD)")
+if colunas_faltantes:
+    st.error(
+        f"Colunas não encontradas no CSV: {colunas_faltantes}"
+    )
+    st.stop()
+
+# --------------------------------------------------
+# BARRA LATERAL - FILTROS
+# --------------------------------------------------
+
+st.sidebar.title("♻️ Londrina Recicla")
+st.sidebar.markdown("### Filtros de análise")
+
+regioes = sorted(
+    df["Regiao_Setor"].dropna().unique()
+)
+
+meses = sorted(
+    df["Mes"].dropna().unique()
+)
+
+regioes_selecionadas = st.sidebar.multiselect(
+    "Selecione as regiões:",
+    options=regioes,
+    default=regioes
+)
+
+meses_selecionados = st.sidebar.multiselect(
+    "Selecione os meses:",
+    options=meses,
+    default=meses
+)
+
+# --------------------------------------------------
+# FILTRAGEM DOS DADOS
+# --------------------------------------------------
+
+df_filtrado = df[
+    (df["Regiao_Setor"].isin(regioes_selecionadas)) &
+    (df["Mes"].isin(meses_selecionados))
+].copy()
+
+# --------------------------------------------------
+# TÍTULO E APRESENTAÇÃO
+# --------------------------------------------------
+
+st.title("♻️ Dashboard de Gestão de Resíduos e Reciclagem")
+
+st.markdown("""
+Acompanhe os indicadores de coleta urbana, coleta seletiva,
+recuperação de materiais recicláveis e impacto ambiental
+no município de Londrina - PR.
+
+Utilize os filtros laterais para explorar os resultados
+por região e período.
+""")
+
+st.caption(
+    "Base de dados simulada para fins acadêmicos e demonstrativos."
+)
+
+st.divider()
+
+# --------------------------------------------------
+# INDICADORES PRINCIPAIS (KPIs)
+# --------------------------------------------------
+
+st.subheader("Indicadores Gerais")
 
 if not df_filtrado.empty:
-    salario_medio = df_filtrado['usd'].mean()
-    salario_maximo = df_filtrado['usd'].max()
-    total_registros = df_filtrado.shape[0]
-    cargo_mais_frequente = df_filtrado["cargo"].mode()[0]
+
+    total_coleta_urbana = df_filtrado[
+        "Residuos_Urbanos_Coletados_ton"
+    ].sum()
+
+    total_coleta_seletiva = df_filtrado[
+        "Residuos_Seletivos_Coletados_ton"
+    ].sum()
+
+    total_recuperacao = df_filtrado[
+        "Taxa_Recuperacao_Seletiva_pct"
+    ].mean()
+
+    co2_evitado = df_filtrado[
+        "Emissoes_CO2_Evitadas_t"
+    ].sum()
+
+    maior_regiao_coleta = (
+        df_filtrado.groupby("Regiao_Setor")[
+            "Residuos_Urbanos_Coletados_ton"
+        ].sum().idxmax()
+    )
+
+    col1, col2, col3, col4, col5 = st.columns(5)
+
+    col1.metric(
+        "Coleta Urbana",
+        f"{total_coleta_urbana:,.0f} ton"
+    )
+
+    col2.metric(
+        "Coleta Seletiva",
+        f"{total_coleta_seletiva:,.0f} ton"
+    )
+
+    col3.metric(
+        "Recuperação Média",
+        f"{total_recuperacao:.2f}%"
+    )
+
+    col4.metric(
+        "CO₂ Evitado",
+        f"{co2_evitado:,.0f} ton"
+    )
+
+    col5.metric(
+        "Maior Coleta Urbana",
+        maior_regiao_coleta
+    )
+
 else:
-    salario_medio, salario_mediano, salario_maximo, total_registros, cargo_mais_comum = 0, 0, 0, ""
+    st.warning("Nenhum dado disponível para os filtros selecionados.")
 
-col1, col2, col3, col4 = st.columns(4)
-col1.metric("Salário médio", f"${salario_medio:,.0f}")
-col2.metric("Salário máximo", f"${salario_maximo:,.0f}")
-col3.metric("Total de registros", f"{total_registros:,}")
-col4.metric("Cargo mais frequente", cargo_mais_frequente)
+st.divider()
 
-st.markdown("---")
+# --------------------------------------------------
+# ANÁLISES VISUAIS
+# --------------------------------------------------
 
-# --- Análises Visuais com Plotly ---
-# Subtítulo
-st.subheader("Gráficos")
-# Definimos duas colunas para fazer um gráfico um do lado do outro.
-col_graf1, col_graf2 = st.columns(2)
+st.subheader("Análises Visuais")
 
-# --- Gráfico de Barras ---
-# Ele trás os top 10 cargos por salário médio.
-with col_graf1:
-    if not df_filtrado.empty:
-        top_cargos = df_filtrado.groupby('cargo')['usd'].mean().nlargest(10).sort_values(ascending=True).reset_index()
-        grafico_cargos = px.bar(
-            top_cargos,
-            x='usd',
-            y='cargo',
-            orientation='h',
-            title="Top 10 cargos por salário médio",
-            labels={'usd': 'Média salarial anual (USD)', 'cargo': ''}
+if not df_filtrado.empty:
+
+    # GRÁFICO 1 - COLETA POR REGIÃO
+
+    col_graf1, col_graf2 = st.columns(2)
+
+    with col_graf1:
+
+        coleta_regiao = (
+            df_filtrado.groupby("Regiao_Setor")[
+                [
+                    "Residuos_Urbanos_Coletados_ton",
+                    "Residuos_Seletivos_Coletados_ton"
+                ]
+            ]
+            .sum()
+            .reset_index()
         )
-        #Aqui organizamos o posicionamento do título.
-        grafico_cargos.update_layout(title_x=0.1, yaxis={'categoryorder':'total ascending'})
 
-        #Aqui exibimos o gráfico com o stringlit para conseguir exibir. O use_container_width=True é um paramêtro de exibição.
-        st.plotly_chart(grafico_cargos, use_container_width=True)
-    else:
-        #Caso dê algum erro o gráfico acabe não seja gerado, a gente puxa o .warning, que vai exibir um aviso.
-        st.warning("Nenhum dado para exibir no gráfico de cargos.")
-
-with col_graf2:
-    # --- Histograma ---
-    # Mostra a distribuição dos salários anuais
-    if not df_filtrado.empty:
-        grafico_hist = px.histogram(
-            df_filtrado,
-            x='usd',
-            nbins=30,
-            title="Distribuição de salários anuais",
-            labels={'usd': 'Faixa salarial (USD)', 'count': ''}
+        coleta_regiao = coleta_regiao.melt(
+            id_vars="Regiao_Setor",
+            var_name="Tipo de coleta",
+            value_name="Quantidade (ton)"
         )
-        grafico_hist.update_layout(title_x=0.1)
-        st.plotly_chart(grafico_hist, use_container_width=True)
-    else:
-        st.warning("Nenhum dado para exibir no gráfico de distribuição.")
 
-col_graf3, col_graf4 = st.columns(2)
-
-with col_graf3:
-    # --- Gráfico de Pizza ---
-    # Mostra a distribuição dos modelos de trabalho
-    if not df_filtrado.empty:
-        remoto_contagem = df_filtrado['remoto'].value_counts().reset_index()
-        remoto_contagem.columns = ['tipo_trabalho', 'quantidade']
-        grafico_remoto = px.pie(
-            remoto_contagem,
-            names='tipo_trabalho',
-            values='quantidade',
-            title='Proporção dos tipos de trabalho',
-            hole=0.5
+        grafico_coleta = px.bar(
+            coleta_regiao,
+            x="Regiao_Setor",
+            y="Quantidade (ton)",
+            color="Tipo de coleta",
+            barmode="group",
+            title="Coleta urbana x coleta seletiva por região"
         )
-        grafico_remoto.update_traces(textinfo='percent+label')
-        grafico_remoto.update_layout(title_x=0.1)
-        st.plotly_chart(grafico_remoto, use_container_width=True)
-    else:
-        st.warning("Nenhum dado para exibir no gráfico dos tipos de trabalho.")
 
-with col_graf4:
-    # --- Gráfico de Pizza ---
-    # Diferença de média salarial para o cargo de Data Science nos Países
-    if not df_filtrado.empty:
-        df_ds = df_filtrado[df_filtrado['cargo'] == 'Data Scientist']
-        media_ds_pais = df_ds.groupby('residencia_iso3')['usd'].mean().reset_index()
-        grafico_paises = px.choropleth(media_ds_pais,
-            locations='residencia_iso3',
-            color='usd',
-            color_continuous_scale='rdylgn',
-            title='Salário médio de Cientista de Dados por país',
-            labels={'usd': 'Salário médio (USD)', 'residencia_iso3': 'País'})
-        grafico_paises.update_layout(title_x=0.1)
-        st.plotly_chart(grafico_paises, use_container_width=True)
-    else:
-        st.warning("Nenhum dado para exibir no gráfico de países.")
+        grafico_coleta.update_layout(title_x=0.1)
 
-# --- Tabela de Dados Detalhados ---
+        st.plotly_chart(
+            grafico_coleta,
+            use_container_width=True
+        )
+
+    # GRÁFICO 2 - EVOLUÇÃO MENSAL
+
+    with col_graf2:
+
+        evolucao_mensal = (
+            df_filtrado.groupby("Data")[
+                [
+                    "Residuos_Urbanos_Coletados_ton",
+                    "Residuos_Seletivos_Coletados_ton"
+                ]
+            ]
+            .sum()
+            .reset_index()
+            .sort_values("Data")
+        )
+
+        evolucao_mensal = evolucao_mensal.melt(
+            id_vars="Data",
+            var_name="Tipo de coleta",
+            value_name="Quantidade (ton)"
+        )
+
+        grafico_mensal = px.line(
+            evolucao_mensal,
+            x="Data",
+            y="Quantidade (ton)",
+            color="Tipo de coleta",
+            markers=True,
+            title="Evolução mensal da coleta de resíduos"
+        )
+
+        grafico_mensal.update_layout(title_x=0.1)
+
+        st.plotly_chart(
+            grafico_mensal,
+            use_container_width=True
+        )
+
+    # GRÁFICO 3 - TAXA DE RECUPERAÇÃO
+
+    col_graf3, col_graf4 = st.columns(2)
+
+    with col_graf3:
+
+        recuperacao_regiao = (
+            df_filtrado.groupby("Regiao_Setor")[
+                "Taxa_Recuperacao_Seletiva_pct"
+            ]
+            .mean()
+            .reset_index()
+        )
+
+        grafico_recuperacao = px.bar(
+            recuperacao_regiao,
+            x="Regiao_Setor",
+            y="Taxa_Recuperacao_Seletiva_pct",
+            title="Taxa média de recuperação por região",
+            labels={
+                "Regiao_Setor": "Região",
+                "Taxa_Recuperacao_Seletiva_pct": "Recuperação (%)"
+            }
+        )
+
+        grafico_recuperacao.update_layout(title_x=0.1)
+
+        st.plotly_chart(
+            grafico_recuperacao,
+            use_container_width=True
+        )
+
+    # GRÁFICO 4 - REJEITOS DA COLETA SELETIVA
+
+    with col_graf4:
+
+        rejeitos_regiao = (
+            df_filtrado.groupby("Regiao_Setor")[
+                "Rejeito_Coleta_Seletiva_pct"
+            ]
+            .mean()
+            .reset_index()
+        )
+
+        grafico_rejeitos = px.bar(
+            rejeitos_regiao,
+            x="Regiao_Setor",
+            y="Rejeito_Coleta_Seletiva_pct",
+            title="Percentual de rejeitos por região",
+            labels={
+                "Regiao_Setor": "Região",
+                "Rejeito_Coleta_Seletiva_pct": "Rejeitos (%)"
+            }
+        )
+
+        grafico_rejeitos.update_layout(title_x=0.1)
+
+        st.plotly_chart(
+            grafico_rejeitos,
+            use_container_width=True
+        )
+
+    # GRÁFICO 5 - IMPACTO AMBIENTAL
+
+    col_graf5, col_graf6 = st.columns(2)
+
+    with col_graf5:
+
+        impacto_ambiental = (
+            df_filtrado.groupby("Regiao_Setor")[
+                "Emissoes_CO2_Evitadas_t"
+            ]
+            .sum()
+            .reset_index()
+        )
+
+        grafico_co2 = px.pie(
+            impacto_ambiental,
+            names="Regiao_Setor",
+            values="Emissoes_CO2_Evitadas_t",
+            title="Distribuição de CO₂ evitado por região",
+            hole=0.45
+        )
+
+        grafico_co2.update_traces(
+            textinfo="percent+label"
+        )
+
+        grafico_co2.update_layout(title_x=0.1)
+
+        st.plotly_chart(
+            grafico_co2,
+            use_container_width=True
+        )
+
+    # GRÁFICO 6 - CUSTO OPERACIONAL
+
+    with col_graf6:
+
+        custos_regiao = (
+            df_filtrado.groupby("Regiao_Setor")[
+                [
+                    "Custo_Unitario_Urbana_R$_ton",
+                    "Custo_Unitario_Seletiva_R$_ton"
+                ]
+            ]
+            .mean()
+            .reset_index()
+        )
+
+        custos_regiao = custos_regiao.melt(
+            id_vars="Regiao_Setor",
+            var_name="Tipo de coleta",
+            value_name="Custo unitário (R$/ton)"
+        )
+
+        grafico_custos = px.bar(
+            custos_regiao,
+            x="Regiao_Setor",
+            y="Custo unitário (R$/ton)",
+            color="Tipo de coleta",
+            barmode="group",
+            title="Comparação do custo unitário por região"
+        )
+
+        grafico_custos.update_layout(title_x=0.1)
+
+        st.plotly_chart(
+            grafico_custos,
+            use_container_width=True
+        )
+
+else:
+    st.info("Selecione pelo menos uma região e um mês para visualizar os gráficos.")
+
+# --------------------------------------------------
+# TABELA DE DADOS DETALHADOS
+# --------------------------------------------------
+
+st.divider()
+
 st.subheader("Dados Detalhados")
-st.dataframe(df_filtrado)
-     
+
+st.dataframe(
+    df_filtrado,
+    use_container_width=True,
+    hide_index=True
+)
+
+# --------------------------------------------------
+# DOWNLOAD DOS DADOS
+# --------------------------------------------------
+
+csv = df_filtrado.to_csv(
+    index=False,
+    sep=";",
+    decimal=","
+).encode("utf-8-sig")
+
+st.download_button(
+    label="📥 Baixar dados filtrados em CSV",
+    data=csv,
+    file_name="indicadores_londrina_filtrados.csv",
+    mime="text/csv"
+)
+
+# --------------------------------------------------
+# RODAPÉ
+# --------------------------------------------------
+
+st.divider()
+
+st.caption(
+    "Londrina Recicla | Projeto acadêmico de análise de dados "
+    "e gestão de resíduos sólidos."
+)
